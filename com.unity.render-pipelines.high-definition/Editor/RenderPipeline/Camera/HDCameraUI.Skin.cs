@@ -13,6 +13,9 @@ namespace UnityEditor.Rendering.HighDefinition
 
         const string msaaWarningMessage = "Manual MSAA target set with deferred rendering. This will lead to undefined behavior.";
 
+        const string prepostUpscalerName = "Using PrePostProcess Upscaler (Detected)";
+        const string prepostUpscalerNameNotDetected = "Using PrePostProcess Upscaler (Not Detected, Using Fallback)";
+
         static readonly GUIContent clearModeContent = EditorGUIUtility.TrTextContent("Background Type", "Specifies the type of background the Camera applies when it clears the screen before rendering a frame. Be aware that when setting this to None, the background is never cleared and since HDRP shares render texture between cameras, you may end up with garbage from previous rendering.");
         static readonly GUIContent backgroundColorContent = EditorGUIUtility.TrTextContent("Background Color", "The Background Color used to clear the screen when selecting Background Color before rendering.");
         static readonly GUIContent cullingMaskContent = EditorGUIUtility.TrTextContent("Culling Mask");
@@ -49,6 +52,7 @@ namespace UnityEditor.Rendering.HighDefinition
         static readonly GUIContent anamorphismContent = EditorGUIUtility.TrTextContent("Anamorphism", "Use the slider to stretch the sensor to simulate an anamorphic look.");
 
         static readonly GUIContent antialiasingContent = EditorGUIUtility.TrTextContent("Post Anti-aliasing", "The postprocess anti-aliasing method to use.");
+        static readonly GUIContent antialiasingContentFallback = EditorGUIUtility.TrTextContent("Fallback Post Anti-aliasing", "The postprocess anti-aliasing method to use as a fallback.");
         static readonly GUIContent SMAAQualityPresetContent = EditorGUIUtility.TrTextContent("SMAA Quality Preset", "The quality preset for SMAA, low has the best performance but worst quality, High has the highest quality but worst performance.");
         static readonly GUIContent TAASharpenContent = EditorGUIUtility.TrTextContent("TAA Sharpen Strength", "The intensity of the sharpen filter used to counterbalance the blur introduced by TAA. A high value might create artifacts such as dark lines depending on the frame content.");
         static readonly GUIContent TAAHistorySharpening = EditorGUIUtility.TrTextContent("TAA History Sharpening", "Values closer to 0 lead to softer look when movement is detected, but can further reduce aliasing. Values closer to 1 lead to sharper results, with the risk of reintroducing a bit of aliasing.");
@@ -61,6 +65,7 @@ namespace UnityEditor.Rendering.HighDefinition
         static readonly GUIContent stopNaNsContent = EditorGUIUtility.TrTextContent("Stop NaNs", "Automatically replaces NaN/Inf in shaders by a black pixel to avoid breaking some effects. This will slightly affect performances and should only be used if you experience NaN issues that you can't fix.");
 
         static readonly GUIContent allowDynResContent = EditorGUIUtility.TrTextContent("Allow Dynamic Resolution", "Whether to support dynamic resolution.");
+        static readonly GUIContent enablePrePostUpscaler = EditorGUIUtility.TrTextContent("Enable Prepost Upscaler", "Use a fancy prepostupscaler.");
 
         static readonly GUIContent viewportContent = EditorGUIUtility.TrTextContent("Viewport Rect", "Four values that indicate where on the screen HDRP draws this Camera view. Measured in Viewport Coordinates (values in the range of [0, 1]).");
         static readonly GUIContent depthContent = EditorGUIUtility.TrTextContent("Depth");

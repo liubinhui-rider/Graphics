@@ -164,7 +164,20 @@ namespace UnityEngine.Rendering.HighDefinition
             public CustomPostProcessVolumeComponent customPostProcess;
         }
 
-        TextureHandle GetPostprocessOutputHandle(RenderGraph renderGraph,  string name, bool dynamicResolution = true)
+        class SceneUpsamplingData
+        {
+            public struct Textures
+            {
+                public TextureHandle color;
+                public TextureHandle depthBuffer;
+                public TextureHandle motionVectors;
+            }
+            public UpsampleSceneParameters parameters;
+            public Textures inputTextures = new Textures();
+            public Textures outputTextures = new Textures();
+        }
+
+        TextureHandle GetPostprocessOutputHandle(RenderGraph renderGraph,  string name, bool dynamicResolution)
         {
             return renderGraph.CreateTexture(new TextureDesc(Vector2.one, dynamicResolution, true)
             {
@@ -173,6 +186,11 @@ namespace UnityEngine.Rendering.HighDefinition
                 useMipMap = false,
                 enableRandomWrite = true
             });
+        }
+
+        TextureHandle GetPostprocessOutputHandle(RenderGraph renderGraph,  string name)
+        {
+            return GetPostprocessOutputHandle(renderGraph, name, resGroup == ResolutionGroup.Downsampled);
         }
 
         TextureHandle GetPostprocessUpsampledOutputHandle(RenderGraph renderGraph, string name)
@@ -885,6 +903,69 @@ namespace UnityEngine.Rendering.HighDefinition
             return source;
         }
 
+        SceneUpsamplingData.Textures SceneUpsamplePass(RenderGraph renderGraph, HDCamera hdCamera, TextureHandle inputColor, TextureHandle inputDepth, TextureHandle inputMotionVectors)
+        {
+            SceneUpsamplingData.Textures outTextures;
+            using (var builder = renderGraph.AddRenderPass<SceneUpsamplingData>("Scene Upsampling", out var passData, ProfilingSampler.Get(HDProfileId.SceneUpsampling)))
+            {
+                passData.parameters = PrepareUpsampleSceneParameters(hdCamera);
+                passData.inputTextures.color = builder.ReadTexture(inputColor);
+                passData.inputTextures.depthBuffer = builder.ReadTexture(inputDepth);
+                passData.inputTextures.motionVectors = builder.ReadTexture(inputMotionVectors);
+                passData.outputTextures.color = renderGraph.CreateTexture(new TextureDesc(Vector2.one, false, true)
+                {
+                    name = "Resolved Color Buffer",
+                    colorFormat = renderGraph.GetTextureDesc(inputColor).colorFormat,
+                    useMipMap = false,
+                    enableRandomWrite = true
+                });
+                passData.outputTextures.color = builder.WriteTexture(passData.outputTextures.color);
+
+                passData.outputTextures.depthBuffer = renderGraph.CreateTexture(new TextureDesc(Vector2.one, false, true)
+                {
+                    name = "Resolved Depth Buffer",
+                    colorFormat = GraphicsFormat.R32_SFloat,
+                    useMipMap = false,
+                    enableRandomWrite = true
+                });
+                passData.outputTextures.depthBuffer = builder.WriteTexture(passData.outputTextures.depthBuffer);
+
+                passData.outputTextures.motionVectors = renderGraph.CreateTexture(new TextureDesc(Vector2.one, false, true)
+                {
+                    name = "Resolved Motion Vectors",
+                    colorFormat = renderGraph.GetTextureDesc(inputMotionVectors).colorFormat,
+                    useMipMap = false,
+                    enableRandomWrite = true
+                });
+                passData.outputTextures.motionVectors = builder.WriteTexture(passData.outputTextures.motionVectors);
+
+                builder.SetRenderFunc(
+                    (SceneUpsamplingData data, RenderGraphContext ctx) =>
+                    {
+                        DoUpsampleScene(
+                            data.parameters, ctx.cmd,
+                            data.inputTextures.color,
+                            data.inputTextures.depthBuffer,
+                            data.inputTextures.motionVectors,
+                            data.outputTextures.color,
+                            data.outputTextures.depthBuffer,
+                            data.outputTextures.motionVectors);
+                    });
+                outTextures = passData.outputTextures;
+            }
+            return outTextures;
+        }
+
+        private void UpdateResolutionGroup(RenderGraph renderGraph, HDCamera camera, ResolutionGroup newResGroup)
+        {
+            if (resGroup == newResGroup)
+                return;
+    
+            resGroup = newResGroup;
+            m_HDInstance.UpdatePostProcessScreenSize(renderGraph, camera, viewport.x, viewport.y);
+        }
+
+
         void FinalPass(RenderGraph renderGraph, HDCamera hdCamera, TextureHandle afterPostProcessTexture, TextureHandle alphaTexture, TextureHandle finalRT, TextureHandle source, BlueNoise blueNoise, bool flipY)
         {
             using (var builder = renderGraph.AddRenderPass<FinalPassData>("Final Pass", out var passData, ProfilingSampler.Get(HDProfileId.FinalPost)))
@@ -1003,6 +1084,10 @@ namespace UnityEngine.Rendering.HighDefinition
 
             var source = colorBuffer;
             TextureHandle alphaTexture = DoCopyAlpha(renderGraph, hdCamera, source);
+    
+            //default always to downsampled resolution group.
+            //when DRS is off this resolution group is the same.
+            UpdateResolutionGroup(renderGraph, hdCamera, ResolutionGroup.Downsampled);
 
             // Note: whether a pass is really executed or not is generally inside the Do* functions.
             // with few exceptions.
@@ -1012,6 +1097,16 @@ namespace UnityEngine.Rendering.HighDefinition
                 source = StopNaNsPass(renderGraph, hdCamera, source);
 
                 source = DynamicExposurePass(renderGraph, hdCamera, source);
+
+                if (DynamicResolutionHandler.instance.upsamplerSchedule == DynamicResolutionHandler.UpsamplerScheduleType.BeforePost
+                    && DynamicResolutionHandler.instance.DynamicResolutionEnabled())
+                {
+                    var upsamplignSceneResults = SceneUpsamplePass(renderGraph, hdCamera, source, depthBuffer, motionVectors);
+                    source = upsamplignSceneResults.color;
+                    depthBuffer = upsamplignSceneResults.depthBuffer;
+                    motionVectors = upsamplignSceneResults.motionVectors;
+                    UpdateResolutionGroup(renderGraph, hdCamera, ResolutionGroup.Full);
+                }
 
                 source = CustomPostProcessPass(renderGraph, hdCamera, source, depthBuffer, normalBuffer, HDRenderPipeline.defaultAsset.beforeTAACustomPostProcesses, HDProfileId.CustomPostProcessBeforeTAA);
 
@@ -1054,8 +1149,12 @@ namespace UnityEngine.Rendering.HighDefinition
                 hdCamera.resetPostProcessingHistory = false;
             }
 
-            // Contrast Adaptive Sharpen Upscaling
-            source = ContrastAdaptiveSharpeningPass(renderGraph, hdCamera, source);
+            // Contrast Adaptive Sharpen Upscaling, which only works after post effects
+            if (DynamicResolutionHandler.instance.upsamplerSchedule == DynamicResolutionHandler.UpsamplerScheduleType.AfterPost)
+            {
+                source = ContrastAdaptiveSharpeningPass(renderGraph, hdCamera, source);
+                UpdateResolutionGroup(renderGraph, hdCamera, ResolutionGroup.Full);
+            }
 
             FinalPass(renderGraph, hdCamera, afterPostProcessTexture, alphaTexture, finalRT, source, blueNoise, flipY);
 

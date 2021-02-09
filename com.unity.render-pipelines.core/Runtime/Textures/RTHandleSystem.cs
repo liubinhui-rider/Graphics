@@ -38,6 +38,11 @@ namespace UnityEngine.Rendering
         /// (x,y) current frame (z,w) last frame (this is only used for buffered RTHandle Systems)
         /// </summary>
         public Vector4 rtHandleScale;
+        /// <summary>
+        /// Scale factor for textures created during post processing.
+        /// (x,y) current frame
+        /// </summary>
+        public Vector4 rtHandlePostProcessScale;
     }
 
     /// <summary>
@@ -217,23 +222,37 @@ namespace UnityEngine.Rendering
                 lastFrameMaxSize = new Vector2(GetMaxWidth(), GetMaxHeight());
             }
 
+            var scales = CalculateRatioAgainstMaxSize(m_RTHandleProperties.currentViewportSize);
             if (DynamicResolutionHandler.instance.HardwareDynamicResIsEnabled() && m_HardwareDynamicResRequested)
             {
-                Vector2Int maxSize = new Vector2Int(GetMaxWidth(), GetMaxHeight());
                 // Making the final scale in 'drs' space, since the final scale must account for rounding pixel values.
-                var scaledFinalViewport = DynamicResolutionHandler.instance.ApplyScalesOnSize(DynamicResolutionHandler.instance.finalViewport);
-                var scaledMaxSize = DynamicResolutionHandler.instance.ApplyScalesOnSize(maxSize);
-                float xScale = (float)scaledFinalViewport.x / (float)scaledMaxSize.x;
-                float yScale = (float)scaledFinalViewport.y / (float)scaledMaxSize.y;
-                m_RTHandleProperties.rtHandleScale = new Vector4(xScale, yScale, m_RTHandleProperties.rtHandleScale.x, m_RTHandleProperties.rtHandleScale.y);
+                m_RTHandleProperties.rtHandleScale = new Vector4(scales.x, scales.y, m_RTHandleProperties.rtHandleScale.x, m_RTHandleProperties.rtHandleScale.y);
             }
             else
             {
-                Vector2 maxSize = new Vector2(GetMaxWidth(), GetMaxHeight());
-                Vector2 scaleCurrent = m_RTHandleProperties.currentViewportSize / maxSize;
                 Vector2 scalePrevious = m_RTHandleProperties.previousViewportSize / lastFrameMaxSize;
-                m_RTHandleProperties.rtHandleScale = new Vector4(scaleCurrent.x, scaleCurrent.y, scalePrevious.x, scalePrevious.y);
+                m_RTHandleProperties.rtHandleScale = new Vector4(scales.x, scales.y, scalePrevious.x, scalePrevious.y);
             }
+
+            SetPostProcessScale(m_RTHandleProperties.currentViewportSize.x, m_RTHandleProperties.currentViewportSize.y);
+        }
+
+        internal void SetPostProcessScale(int width, int height)
+        {
+            Vector2 scales = CalculateRatioAgainstMaxSize(new Vector2Int(width, height));
+            m_RTHandleProperties.rtHandlePostProcessScale = new Vector4(scales.x, scales.y, m_RTHandleProperties.rtHandlePostProcessScale.x, m_RTHandleProperties.rtHandlePostProcessScale.y);
+        }
+
+        internal Vector2 CalculateRatioAgainstMaxSize(in Vector2Int viewport)
+        {
+            Vector2 currentScale = new Vector2(1.0f, 1.0f);
+            if (DynamicResolutionHandler.instance.HardwareDynamicResIsEnabled() && m_HardwareDynamicResRequested)
+            {
+                currentScale = (Vector2)viewport / (Vector2)DynamicResolutionHandler.instance.finalViewport;
+            }
+
+            Vector2 scaledMaxSize = DynamicResolutionHandler.instance.ApplyScalesOnSize(new Vector2Int(GetMaxWidth(), GetMaxHeight()), currentScale);
+            return new Vector2((float)viewport.x / scaledMaxSize.x, (float)viewport.y / scaledMaxSize.y);
         }
 
         /// <summary>

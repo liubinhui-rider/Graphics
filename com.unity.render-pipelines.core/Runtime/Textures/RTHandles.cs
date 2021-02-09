@@ -335,5 +335,10 @@ namespace UnityEngine.Rendering
         {
             s_DefaultInstance.ResetReferenceSize(width, height);
         }
+
+        public static void SetPostProcessScale(int width, int height)
+        {
+            s_DefaultInstance.SetPostProcessScale(width, height);
+        }
     }
 }

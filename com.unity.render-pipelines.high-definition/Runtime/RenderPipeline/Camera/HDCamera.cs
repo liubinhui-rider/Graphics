@@ -70,6 +70,11 @@ namespace UnityEngine.Rendering.HighDefinition
         /// Width, height, inverse width, inverse height.
         /// </summary>
         public Vector4              screenSize;
+        /// <summary>
+        /// Screen resolution information for post processes passes.
+        /// Width, height, inverse width, inverse height.
+        /// </summary>
+        public Vector4              postProcessScreenSize;
         /// <summary>Camera frustum.</summary>
         public Frustum              frustum;
         /// <summary>Camera component.</summary>
@@ -602,6 +607,7 @@ namespace UnityEngine.Rendering.HighDefinition
             msaaSamples = newMSAASamples;
 
             screenSize = new Vector4(screenWidth, screenHeight, 1.0f / screenWidth, 1.0f / screenHeight);
+            postProcessScreenSize = screenSize;
             screenParams = new Vector4(screenSize.x, screenSize.y, 1 + screenSize.z, 1 + screenSize.w);
 
             const int kMaxSampleCount = 8;
@@ -612,6 +618,9 @@ namespace UnityEngine.Rendering.HighDefinition
             isFirstFrame = false;
             cameraFrameCount++;
 
+
+            DynamicResolutionHandler.instance.upsamplerSchedule = m_AdditionalCameraData != null && m_AdditionalCameraData.enablePrepostUpscaler ? DynamicResolutionHandler.UpsamplerScheduleType.BeforePost : DynamicResolutionHandler.UpsamplerScheduleType.AfterPost;
+
             HDRenderPipeline.UpdateVolumetricBufferParams(this);
             HDRenderPipeline.ResizeVolumetricHistoryBuffers(this);
         }
@@ -621,6 +630,12 @@ namespace UnityEngine.Rendering.HighDefinition
         {
             RTHandles.SetReferenceSize(actualWidth, actualHeight, msaaSamples);
             m_HistoryRTSystem.SwapAndSetReferenceSize(actualWidth, actualHeight, msaaSamples);
+        }
+
+        internal void SetPostProcessScreenSize(int width, int height)
+        {
+            postProcessScreenSize = new Vector4((float)width, (float)height, 1.0f / (float)width, 1.0f / (float)height);
+            RTHandles.SetPostProcessScale(width, height);
         }
 
         // Updating RTHandle needs to be done at the beginning of rendering (not during update of HDCamera which happens in batches)
@@ -710,6 +725,16 @@ namespace UnityEngine.Rendering.HighDefinition
                 }
             }
         }
+    
+        unsafe internal void UpdateScalesAndScreenSizesCB(ref ShaderVariablesGlobal cb)
+        {
+            cb._ScreenSize = screenSize;
+            cb._PostProcessScreenSize = postProcessScreenSize;
+            cb._RTHandleScale = RTHandles.rtHandleProperties.rtHandleScale;
+            cb._RTHandleScaleHistory = m_HistoryRTSystem.rtHandleProperties.rtHandleScale;
+            cb._RTHandlePostProcessScale = RTHandles.rtHandleProperties.rtHandlePostProcessScale;
+            cb._RTHandlePostProcessScaleHistory = m_HistoryRTSystem.rtHandleProperties.rtHandlePostProcessScale;
+        }
 
         unsafe internal void UpdateShaderVariablesGlobalCB(ref ShaderVariablesGlobal cb)
             => UpdateShaderVariablesGlobalCB(ref cb, (int)cameraFrameCount);
@@ -733,9 +758,7 @@ namespace UnityEngine.Rendering.HighDefinition
             cb._PrevInvViewProjMatrix = mainViewConstants.prevInvViewProjMatrix;
             cb._WorldSpaceCameraPos_Internal = mainViewConstants.worldSpaceCameraPos;
             cb._PrevCamPosRWS_Internal = mainViewConstants.prevWorldSpaceCameraPos;
-            cb._ScreenSize = screenSize;
-            cb._RTHandleScale = RTHandles.rtHandleProperties.rtHandleScale;
-            cb._RTHandleScaleHistory = m_HistoryRTSystem.rtHandleProperties.rtHandleScale;
+            UpdateScalesAndScreenSizesCB(ref cb);
             cb._ZBufferParams = zBufferParams;
             cb._ProjectionParams = projectionParams;
             cb.unity_OrthoParams = unity_OrthoParams;
