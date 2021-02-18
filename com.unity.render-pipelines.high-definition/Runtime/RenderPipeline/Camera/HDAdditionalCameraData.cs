@@ -314,10 +314,6 @@ namespace UnityEngine.Rendering.HighDefinition
         [Tooltip("Allows dynamic resolution on buffers linked to this camera.")]
         public bool allowDynamicResolution = false;
 
-        /// <summary>Enables a very cool pre post effect upscaler.</summary>
-        [Tooltip("Enables a specialized upscaler that must run before post effects.")]
-        public bool enablePrepostUpscaler = false;
-
         /// <summary>Allows you to override the default frame settings for this camera.</summary>
         [Tooltip("Allows you to override the default settings for this camera.")]
         public bool customRenderingSettings = false;

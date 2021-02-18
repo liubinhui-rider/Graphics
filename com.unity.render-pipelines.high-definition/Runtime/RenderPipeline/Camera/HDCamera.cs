@@ -618,8 +618,9 @@ namespace UnityEngine.Rendering.HighDefinition
             isFirstFrame = false;
             cameraFrameCount++;
 
-
-            DynamicResolutionHandler.instance.upsamplerSchedule = m_AdditionalCameraData != null && m_AdditionalCameraData.enablePrepostUpscaler ? DynamicResolutionHandler.UpsamplerScheduleType.BeforePost : DynamicResolutionHandler.UpsamplerScheduleType.AfterPost;
+            DynamicResolutionHandler.instance.upsamplerSchedule = currentFrameSettings.IsEnabled(FrameSettingsField.PrepostUpscaler) ? 
+                DynamicResolutionHandler.UpsamplerScheduleType.BeforePost :
+                DynamicResolutionHandler.UpsamplerScheduleType.AfterPost;
 
             HDRenderPipeline.UpdateVolumetricBufferParams(this);
             HDRenderPipeline.ResizeVolumetricHistoryBuffers(this);

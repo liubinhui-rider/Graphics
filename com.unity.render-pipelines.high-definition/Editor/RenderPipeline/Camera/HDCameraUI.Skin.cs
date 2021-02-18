@@ -15,6 +15,8 @@ namespace UnityEditor.Rendering.HighDefinition
 
         const string prepostUpscalerName = "Using PrePostProcess Upscaler (Detected)";
         const string prepostUpscalerNameNotDetected = "Using PrePostProcess Upscaler (Not Detected, Using Fallback)";
+        const string prepostUpscalerFeatureDetectedMsg = "**PrepostUpscaler detected**\n The fallback Anti-aliasing filter is ignored in the current session.";
+        const string prepostUpscalerFeatureNotDetectedMsg = "**PrepostUpscaler not detected**\n The fallback Anti-aliasing filter is being utilized in the current session.";
 
         static readonly GUIContent clearModeContent = EditorGUIUtility.TrTextContent("Background Type", "Specifies the type of background the Camera applies when it clears the screen before rendering a frame. Be aware that when setting this to None, the background is never cleared and since HDRP shares render texture between cameras, you may end up with garbage from previous rendering.");
         static readonly GUIContent backgroundColorContent = EditorGUIUtility.TrTextContent("Background Color", "The Background Color used to clear the screen when selecting Background Color before rendering.");

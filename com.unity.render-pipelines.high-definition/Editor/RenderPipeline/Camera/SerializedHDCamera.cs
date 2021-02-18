@@ -40,7 +40,6 @@ namespace UnityEditor.Rendering.HighDefinition
         public SerializedProperty volumeLayerMask;
         public SerializedProperty volumeAnchorOverride;
         public SerializedProperty allowDynamicResolution;
-        public SerializedProperty enablePrepostUpscaler;
         public SerializedFrameSettings frameSettings;
         public CameraEditor.Settings baseCameraSettings { get; private set; }
 
@@ -102,7 +101,6 @@ namespace UnityEditor.Rendering.HighDefinition
 
             probeLayerMask = serializedAdditionalDataObject.Find((HDAdditionalCameraData d) => d.probeLayerMask);
             allowDynamicResolution = serializedAdditionalDataObject.Find((HDAdditionalCameraData d) => d.allowDynamicResolution);
-            enablePrepostUpscaler = serializedAdditionalDataObject.Find((HDAdditionalCameraData d) => d.enablePrepostUpscaler);
 
             baseCameraSettings = new CameraEditor.Settings(serializedObject);
             baseCameraSettings.OnEnable();

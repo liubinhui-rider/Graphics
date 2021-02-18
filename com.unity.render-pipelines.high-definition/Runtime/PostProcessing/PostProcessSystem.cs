@@ -119,6 +119,7 @@ namespace UnityEngine.Rendering.HighDefinition
         bool m_TonemappingFS;
         bool m_FilmGrainFS;
         bool m_DitheringFS;
+        bool m_PrepostUpscalerFS;
         bool m_AntialiasingFS;
 
         // Debug Exposure compensation (Drive by debug menu) to add to all exposure processed value
@@ -307,14 +308,11 @@ namespace UnityEngine.Rendering.HighDefinition
             m_TonemappingFS         = frameSettings.IsEnabled(FrameSettingsField.Tonemapping);
             m_FilmGrainFS           = frameSettings.IsEnabled(FrameSettingsField.FilmGrain);
             m_DitheringFS           = frameSettings.IsEnabled(FrameSettingsField.Dithering);
+            m_PrepostUpscalerFS     = frameSettings.IsEnabled(FrameSettingsField.PrepostUpscaler);
             m_AntialiasingFS        = frameSettings.IsEnabled(FrameSettingsField.Antialiasing);
 
             // Override full screen anti-aliasing when doing path tracing (which is naturally anti-aliased already)
             m_AntialiasingFS        &= !m_PathTracing.enable.value;
-
-            // Antialiasing of any sort is disabled on DRS Pre post processes.
-            // The assumption here is that upsamplers that work before post processes should perform anti aliasing as well in one go.
-            m_AntialiasingFS        &= DynamicResolutionHandler.instance.DynamicResolutionEnabled() && DynamicResolutionHandler.instance.upsamplerSchedule != DynamicResolutionHandler.UpsamplerScheduleType.BeforePost;
 
             m_DebugExposureCompensation = m_HDInstance.m_CurrentDebugDisplaySettings.data.lightingDebugSettings.debugExposure;
 
