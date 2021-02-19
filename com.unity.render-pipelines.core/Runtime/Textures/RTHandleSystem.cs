@@ -248,6 +248,9 @@ namespace UnityEngine.Rendering
             Vector2 currentScale = new Vector2(1.0f, 1.0f);
             if (DynamicResolutionHandler.instance.HardwareDynamicResIsEnabled() && m_HardwareDynamicResRequested)
             {
+                //for hardware resolution, the final goal is to figure out a scale from finalViewport into maxViewport.
+                //This is however wrong! because the actualViewport might not fit the finalViewport perfectly, due to rounding.
+                //A correct way is to instead downscale the maxViewport, and keep the final scale in terms of downsampled buffers. 
                 currentScale = (Vector2)viewport / (Vector2)DynamicResolutionHandler.instance.finalViewport;
             }
 
