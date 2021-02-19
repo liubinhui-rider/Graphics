@@ -960,11 +960,10 @@ namespace UnityEngine.Rendering.HighDefinition
         {
             if (resGroup == newResGroup)
                 return;
-    
+
             resGroup = newResGroup;
             m_HDInstance.UpdatePostProcessScreenSize(renderGraph, camera, viewport.x, viewport.y);
         }
-
 
         void FinalPass(RenderGraph renderGraph, HDCamera hdCamera, TextureHandle afterPostProcessTexture, TextureHandle alphaTexture, TextureHandle finalRT, TextureHandle source, BlueNoise blueNoise, bool flipY)
         {
@@ -1084,7 +1083,7 @@ namespace UnityEngine.Rendering.HighDefinition
 
             var source = colorBuffer;
             TextureHandle alphaTexture = DoCopyAlpha(renderGraph, hdCamera, source);
-    
+
             //default always to downsampled resolution group.
             //when DRS is off this resolution group is the same.
             UpdateResolutionGroup(renderGraph, hdCamera, ResolutionGroup.Downsampled);

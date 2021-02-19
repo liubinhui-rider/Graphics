@@ -618,7 +618,7 @@ namespace UnityEngine.Rendering.HighDefinition
             isFirstFrame = false;
             cameraFrameCount++;
 
-            DynamicResolutionHandler.instance.upsamplerSchedule = currentFrameSettings.IsEnabled(FrameSettingsField.PrepostUpscaler) ? 
+            DynamicResolutionHandler.instance.upsamplerSchedule = currentFrameSettings.IsEnabled(FrameSettingsField.PrepostUpscaler) ?
                 DynamicResolutionHandler.UpsamplerScheduleType.BeforePost :
                 DynamicResolutionHandler.UpsamplerScheduleType.AfterPost;
 
@@ -726,7 +726,7 @@ namespace UnityEngine.Rendering.HighDefinition
                 }
             }
         }
-    
+
         unsafe internal void UpdateScalesAndScreenSizesCB(ref ShaderVariablesGlobal cb)
         {
             cb._ScreenSize = screenSize;

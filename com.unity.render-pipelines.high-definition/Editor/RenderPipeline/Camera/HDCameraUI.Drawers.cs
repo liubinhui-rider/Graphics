@@ -557,7 +557,7 @@ namespace UnityEditor.Rendering.HighDefinition
                     //write here support string for prepost upscaler
                     EditorGUILayout.HelpBox(
                         featureDetected ? prepostUpscalerFeatureDetectedMsg : prepostUpscalerFeatureNotDetectedMsg,
-                        featureDetected ? MessageType.Info :MessageType.Warning);
+                        featureDetected ? MessageType.Info : MessageType.Warning);
                 }
             }
 
@@ -603,7 +603,6 @@ namespace UnityEditor.Rendering.HighDefinition
 
             if (doGlobalIndent)
                 EditorGUI.indentLevel--;
-
         }
 
         static void Drawer_Dithering(SerializedHDCamera p, Editor owner)

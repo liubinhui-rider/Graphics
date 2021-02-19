@@ -8,16 +8,16 @@ namespace UnityEngine.Rendering.HighDefinition
         {
             PrepostUpscalerDetected
         }
-    
+
         public static bool GetFlag(Flag flag)
         {
             return (s_FeatureFlags & (1 << (int)flag)) != 0;
         }
-    
-#region private and internal state
-    
+
+        #region private and internal state
+
         private static int s_FeatureFlags = 0;
-    
+
         internal static void SetFeatureFlag(Flag flag, bool state)
         {
             int mask = (1 << (int)flag);
@@ -26,8 +26,7 @@ namespace UnityEngine.Rendering.HighDefinition
             else
                 s_FeatureFlags &= ~mask;
         }
-    
-#endregion
-    
+
+        #endregion
     }
 }

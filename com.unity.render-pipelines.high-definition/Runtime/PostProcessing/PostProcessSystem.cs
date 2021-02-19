@@ -72,8 +72,8 @@ namespace UnityEngine.Rendering.HighDefinition
 
         //Viewport information
 
-        Vector2Int m_FullRes = new Vector2Int(1,1);
-        Vector2Int m_DownsampledRes = new Vector2Int(1,1);
+        Vector2Int m_FullRes = new Vector2Int(1, 1);
+        Vector2Int m_DownsampledRes = new Vector2Int(1, 1);
 
         private enum ResolutionGroup
         {
@@ -83,7 +83,7 @@ namespace UnityEngine.Rendering.HighDefinition
 
         private ResolutionGroup resGroup { set; get; }
 
-        private Vector2Int viewport { get { return  resGroup == ResolutionGroup.Full ? m_FullRes : m_DownsampledRes; } }
+        private Vector2Int viewport { get { return resGroup == ResolutionGroup.Full ? m_FullRes : m_DownsampledRes; } }
 
         // Prefetched components (updated on every frame)
         Exposure m_Exposure;
@@ -3527,7 +3527,7 @@ namespace UnityEngine.Rendering.HighDefinition
                     finalPassMaterial.SetTexture(HDShaderIDs._BlueNoiseTexture, blueNoiseTexture);
                     finalPassMaterial.SetVector(HDShaderIDs._DitherParams,
                         new Vector3((float)parameters.viewport.x / (float)blueNoiseTexture.width,
-                                    (float)parameters.viewport.y / (float)blueNoiseTexture.height, textureId));
+                            (float)parameters.viewport.y / (float)blueNoiseTexture.height, textureId));
                 }
             }
 

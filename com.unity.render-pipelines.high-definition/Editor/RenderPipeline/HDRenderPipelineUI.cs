@@ -590,7 +590,7 @@ namespace UnityEditor.Rendering.HighDefinition
                 {
                     EditorGUILayout.HelpBox(
                         featureDetected ? Styles.prepostUpscalerFeatureDetectedMsg : Styles.prepostUpscalerFeatureNotDetectedMsg,
-                        featureDetected ? MessageType.Info :MessageType.Warning);
+                        featureDetected ? MessageType.Info : MessageType.Warning);
                 }
             }
 
