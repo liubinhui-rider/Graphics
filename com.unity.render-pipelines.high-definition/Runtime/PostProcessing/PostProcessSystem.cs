@@ -319,14 +319,7 @@ namespace UnityEngine.Rendering.HighDefinition
                     }
                 }
 
-                // Note: GetExposureTexture(camera) must be call AFTER the call of DoFixedExposure to be correctly taken into account
-                // When we use Dynamic Exposure and we reset history we can't use pre-exposure (as there is no information)
-                // For this reasons we put neutral value at the beginning of the frame in Exposure textures and
-                // apply processed exposure from color buffer at the end of the Frame, only for a single frame.
-                // After that we re-use the pre-exposure system
-                RTHandle currentExposureTexture = (camera.resetPostProcessingHistory && !isFixedExposure) ? m_EmptyExposureTexture : GetExposureTexture(camera);
-
-                cmd.SetGlobalTexture(HDShaderIDs._ExposureTexture, currentExposureTexture);
+                cmd.SetGlobalTexture(HDShaderIDs._ExposureTexture, GetExposureTexture(camera));
                 cmd.SetGlobalTexture(HDShaderIDs._PrevExposureTexture, GetPreviousExposureTexture(camera));
             }
         }
@@ -742,6 +735,14 @@ namespace UnityEngine.Rendering.HighDefinition
 
         public RTHandle GetExposureTexture(HDCamera camera)
         {
+            // Note: GetExposureTexture(camera) must be call AFTER the call of DoFixedExposure to be correctly taken into account
+            // When we use Dynamic Exposure and we reset history we can't use pre-exposure (as there is no information)
+            // For this reasons we put neutral value at the beginning of the frame in Exposure textures and
+            // apply processed exposure from color buffer at the end of the Frame, only for a single frame.
+            // After that we re-use the pre-exposure system
+            if (m_Exposure != null && camera.resetPostProcessingHistory && !IsExposureFixed(camera))
+                return m_EmptyExposureTexture;
+
             // 1x1 pixel, holds the current exposure multiplied in the red channel and EV100 value
             // in the green channel
             // One frame delay + history RTs being flipped at the beginning of the frame means we
