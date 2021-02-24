@@ -248,9 +248,12 @@ namespace UnityEngine.Rendering.HighDefinition
                 return;
             }
 
-            var parentExposureTextures = parentHdCam.currentExposureTextures;
-            parentExposureTextures.useCurrentCamera = false;
-            currentExposureTextures = parentExposureTextures;
+            currentExposureTextures = new ExposureTextures()
+            {
+                useCurrentCamera = false,
+                current = parentHdCam.currentExposureTextures.previous,
+                previous = parentHdCam.currentExposureTextures.current
+            };
 
             m_parentCamera = parentHdCam.camera;
         }
@@ -386,10 +389,26 @@ namespace UnityEngine.Rendering.HighDefinition
             if (!m_ExposureTextures.useCurrentCamera)
                 return;
 
+            var currentTexture = GetCurrentFrameRT((int)HDCameraFrameHistoryType.Exposure);
+            if (currentTexture == null)
+            {
+                RTHandle Allocator(string id, int frameIndex, RTHandleSystem rtHandleSystem)
+                {
+                    // r: multiplier, g: EV100
+                    var rt = rtHandleSystem.Alloc(1, 1, colorFormat: PostProcessSystem.k_ExposureFormat,
+                        enableRandomWrite: true, name: $"{id} Exposure Texture {frameIndex}"
+                    );
+                    PostProcessSystem.SetExposureTextureToEmpty(rt);
+                    return rt;
+                }
+
+                currentTexture = AllocHistoryFrameRT((int)HDCameraFrameHistoryType.Exposure, Allocator, 2);
+            }
+
             // One frame delay + history RTs being flipped at the beginning of the frame means we
             // have to grab the exposure marked as "previous"
             m_ExposureTextures.current = GetPreviousFrameRT((int)HDCameraFrameHistoryType.Exposure);
-            m_ExposureTextures.previous = GetCurrentFrameRT((int)HDCameraFrameHistoryType.Exposure);
+            m_ExposureTextures.previous = currentTexture;
         }
 
         // This value will always be correct for the current camera, no need to check for

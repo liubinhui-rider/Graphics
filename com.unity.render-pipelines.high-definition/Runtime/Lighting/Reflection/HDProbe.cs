@@ -166,6 +166,14 @@ namespace UnityEngine.Rendering.HighDefinition
             while (probeExposureAsyncRequest.Count != 0)
             {
                 AsyncGPUReadbackRequest request = probeExposureAsyncRequest.Peek();
+#if UNITY_EDITOR
+                //HACK: when we are in the unity editor, requests get updated very very infrequently
+                // by the runtime. This can cause the probeExposureAsyncRequest to become super bloated:
+                // sometimes up to 800 requests get accumulated.
+                // This hack forces an update of the request when in editor mode, now the probeExposureAsyncRequest averages
+                // 3 elements. Not necesary when running in player mode, since the requests get updated properly (due to swap chain complexities)
+                request.Update();
+#endif
                 if (!request.done && !probeExposureAsyncRequest.Peek().hasError)
                     break;
 

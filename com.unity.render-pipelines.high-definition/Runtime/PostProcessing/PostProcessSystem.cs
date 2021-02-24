@@ -21,7 +21,7 @@ namespace UnityEngine.Rendering.HighDefinition
 
         GraphicsFormat m_ColorFormat            = GraphicsFormat.B10G11R11_UFloatPack32;
         const GraphicsFormat k_CoCFormat        = GraphicsFormat.R16_SFloat;
-        const GraphicsFormat k_ExposureFormat   = GraphicsFormat.R32G32_SFloat;
+        internal const GraphicsFormat k_ExposureFormat   = GraphicsFormat.R32G32_SFloat;
 
         readonly RenderPipelineResources m_Resources;
         Material m_FinalPassMaterial;
@@ -137,7 +137,7 @@ namespace UnityEngine.Rendering.HighDefinition
 
         bool m_IsDoFHisotoryValid = false;
 
-        static void SetExposureTextureToEmpty(RTHandle exposureTexture)
+        internal static void SetExposureTextureToEmpty(RTHandle exposureTexture)
         {
             var tex = new Texture2D(1, 1, GraphicsFormat.R16G16_SFloat, TextureCreationFlags.None);
             tex.SetPixel(0, 0, new Color(1f, ColorUtils.ConvertExposureToEV100(1f), 0f, 0f));
@@ -298,12 +298,6 @@ namespace UnityEngine.Rendering.HighDefinition
             CheckRenderTexturesValidity();
 
             // Handle fixed exposure & disabled pre-exposure by forcing an exposure multiplier of 1
-            if (!m_ExposureControlFS)
-            {
-                cmd.SetGlobalTexture(HDShaderIDs._ExposureTexture, m_EmptyExposureTexture);
-                cmd.SetGlobalTexture(HDShaderIDs._PrevExposureTexture, m_EmptyExposureTexture);
-            }
-            else
             {
                 // Fix exposure is store in Exposure Textures at the beginning of the frame as there is no need for color buffer
                 // Dynamic exposure (Auto, curve) is store in Exposure Textures at the end of the frame (as it rely on color buffer)
@@ -312,13 +306,11 @@ namespace UnityEngine.Rendering.HighDefinition
 
                 //if exposure comes from the parent camera, it means we dont have to calculate / force it.
                 //Its already been done in the parent camera.
-                if (isFixedExposure && camera.currentExposureTextures.useCurrentCamera)
+                if (m_ExposureControlFS && isFixedExposure && camera.currentExposureTextures.useCurrentCamera)
                 {
                     using (new ProfilingScope(cmd, ProfilingSampler.Get(HDProfileId.FixedExposure)))
                     {
-                        RTHandle prevExposure;
-                        GrabExposureHistoryTextures(camera, out prevExposure, out _);
-                        DoFixedExposure(PrepareExposureParameters(camera), cmd, prevExposure);
+                        DoFixedExposure(PrepareExposureParameters(camera), cmd, camera.currentExposureTextures.current);
                     }
                 }
 
@@ -657,8 +649,17 @@ namespace UnityEngine.Rendering.HighDefinition
                 // Setup variants
                 var adaptationMode = m_Exposure.adaptationMode.value;
 
-                if (!Application.isPlaying || hdCamera.resetPostProcessingHistory)
+                parameters.adaptationParams = new Vector4(m_Exposure.adaptationSpeedLightToDark.value, m_Exposure.adaptationSpeedDarkToLight.value, 0.0f, 0.0f);
+
+                if (hdCamera.resetPostProcessingHistory)
+                {
                     adaptationMode = AdaptationMode.Fixed;
+                }
+                else if (!Application.isPlaying)
+                {
+                    adaptationMode = AdaptationMode.Progressive;
+                    parameters.adaptationParams = new Vector4(0.9f, 0.9f, 0.0f, 0.0f);
+                }
 
                 parameters.exposureVariants = m_ExposureVariants;
                 parameters.exposureVariants[0] = 1; // (int)exposureSettings.luminanceSource.value;
@@ -675,7 +676,6 @@ namespace UnityEngine.Rendering.HighDefinition
                 bool needsCurve = (isHistogramBased && m_Exposure.histogramUseCurveRemapping.value) || m_Exposure.mode.value == ExposureMode.CurveMapping;
 
                 parameters.histogramUsesCurve = m_Exposure.histogramUseCurveRemapping.value;
-                parameters.adaptationParams = new Vector4(m_Exposure.adaptationSpeedLightToDark.value, m_Exposure.adaptationSpeedDarkToLight.value, 0.0f, 0.0f);
 
                 parameters.exposureMode = m_Exposure.mode.value;
 
@@ -738,6 +738,9 @@ namespace UnityEngine.Rendering.HighDefinition
 
         public RTHandle GetExposureTexture(HDCamera camera)
         {
+            if (!m_ExposureControlFS)
+                return m_EmptyExposureTexture;
+
             // Note: GetExposureTexture(camera) must be call AFTER the call of DoFixedExposure to be correctly taken into account
             // When we use Dynamic Exposure and we reset history we can't use pre-exposure (as there is no information)
             // For this reasons we put neutral value at the beginning of the frame in Exposure textures and
@@ -754,6 +757,9 @@ namespace UnityEngine.Rendering.HighDefinition
 
         public RTHandle GetPreviousExposureTexture(HDCamera camera)
         {
+            if (!m_ExposureControlFS)
+                return m_EmptyExposureTexture;
+
             // See GetExposureTexture
             var rt = camera.currentExposureTextures.previous;
             return rt ?? m_EmptyExposureTexture;
@@ -771,7 +777,7 @@ namespace UnityEngine.Rendering.HighDefinition
 
         internal int GetLutSize()
         {
-            return m_LutSize;
+            return m_LutSize; 
         }
 
         internal ComputeBuffer GetHistogramBuffer()
@@ -833,26 +839,6 @@ namespace UnityEngine.Rendering.HighDefinition
             cmd.DispatchCompute(cs, kernel, 1, 1, 1);
         }
 
-        static void GrabExposureHistoryTextures(HDCamera camera, out RTHandle previous, out RTHandle next)
-        {
-            RTHandle Allocator(string id, int frameIndex, RTHandleSystem rtHandleSystem)
-            {
-                // r: multiplier, g: EV100
-                var rt = rtHandleSystem.Alloc(1, 1, colorFormat: k_ExposureFormat,
-                    enableRandomWrite: true, name: $"{id} Exposure Texture {frameIndex}"
-                );
-                SetExposureTextureToEmpty(rt);
-                return rt;
-            }
-
-            // We rely on the RT history system that comes with HDCamera, but because it is swapped
-            // at the beginning of the frame and exposure is applied with a one-frame delay it means
-            // that 'current' and 'previous' are swapped
-            next = camera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.Exposure)
-                ?? camera.AllocHistoryFrameRT((int)HDCameraFrameHistoryType.Exposure, Allocator, 2);
-            previous = camera.GetPreviousFrameRT((int)HDCameraFrameHistoryType.Exposure);
-        }
-
         void PrepareExposureCurveData(out float min, out float max)
         {
             var curve = m_Exposure.curveMap.value;
@@ -908,7 +894,8 @@ namespace UnityEngine.Rendering.HighDefinition
 
         void GrabExposureRequiredTextures(HDCamera camera, out RTHandle prevExposure, out RTHandle nextExposure)
         {
-            GrabExposureHistoryTextures(camera, out prevExposure, out nextExposure);
+            prevExposure = camera.currentExposureTextures.current;
+            nextExposure = camera.currentExposureTextures.previous;
             if (camera.resetPostProcessingHistory)
             {
                 // For Dynamic Exposure, we need to undo the pre-exposure from the color buffer to calculate the correct one
