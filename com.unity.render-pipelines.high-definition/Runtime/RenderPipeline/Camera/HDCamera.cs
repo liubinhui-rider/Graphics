@@ -237,7 +237,7 @@ namespace UnityEngine.Rendering.HighDefinition
         internal float                  lastTime;
 
         private  Camera                 m_parentCamera = null; // Used for recursive rendering, e.g. a reflection in a scene view.
-        internal  Camera                 parentCamera { get { return m_parentCamera; } } 
+        internal  Camera                 parentCamera { get { return m_parentCamera; } }
 
         internal void SetParentCamera(HDCamera parentHdCam)
         {
