@@ -248,6 +248,13 @@ namespace UnityEngine.Rendering.HighDefinition
                 return;
             }
 
+            if (!m_ExposureControlFS)
+            {
+                currentExposureTextures = new ExposureTextures() { useCurrentCamera = true, current = null, previous = null };
+                m_parentCamera = null;
+                return;
+            }
+
             currentExposureTextures = new ExposureTextures()
             {
                 useCurrentCamera = false,
@@ -380,6 +387,8 @@ namespace UnityEngine.Rendering.HighDefinition
             public RTHandle previous;
         }
 
+        private bool m_ExposureControlFS = false;
+        internal bool exposureControlFS { get { return m_ExposureControlFS; } }
         private ExposureTextures m_ExposureTextures = new ExposureTextures(){ useCurrentCamera = true, current = null, previous = null };
 
         internal ExposureTextures currentExposureTextures { set { m_ExposureTextures = value; } get { return m_ExposureTextures; } }
@@ -388,6 +397,13 @@ namespace UnityEngine.Rendering.HighDefinition
         {
             if (!m_ExposureTextures.useCurrentCamera)
                 return;
+
+            if (!m_ExposureControlFS)
+            {
+                m_ExposureTextures.current = null;
+                m_ExposureTextures.previous = null;
+                return; 
+            }
 
             var currentTexture = GetCurrentFrameRT((int)HDCameraFrameHistoryType.Exposure);
             if (currentTexture == null)
@@ -579,6 +595,8 @@ namespace UnityEngine.Rendering.HighDefinition
             xr = xrPass;
             frameSettings = currentFrameSettings;
 
+            m_ExposureControlFS = frameSettings.IsEnabled(FrameSettingsField.ExposureControl);
+
             UpdateAntialiasing();
 
             // Handle memory allocation.
@@ -613,6 +631,9 @@ namespace UnityEngine.Rendering.HighDefinition
                     // The history system only supports the "nuke all" option.
                     m_HistoryRTSystem.Dispose();
                     m_HistoryRTSystem = new BufferedRTHandleSystem();
+
+                    m_ExposureTextures.current = null;
+                    m_ExposureTextures.previous = null;
 
                     if (numColorPyramidBuffersRequired != 0)
                     {

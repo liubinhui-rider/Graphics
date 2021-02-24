@@ -91,7 +91,6 @@ namespace UnityEngine.Rendering.HighDefinition
         PathTracing m_PathTracing;
 
         // Prefetched frame settings (updated on every frame)
-        bool m_ExposureControlFS;
         bool m_StopNaNFS;
         bool m_DepthOfFieldFS;
         bool m_MotionBlurFS;
@@ -275,7 +274,6 @@ namespace UnityEngine.Rendering.HighDefinition
             // Prefetch frame settings - these aren't free to pull so we want to do it only once
             // per frame
             var frameSettings = camera.frameSettings;
-            m_ExposureControlFS     = frameSettings.IsEnabled(FrameSettingsField.ExposureControl);
             m_StopNaNFS             = frameSettings.IsEnabled(FrameSettingsField.StopNaN);
             m_DepthOfFieldFS        = frameSettings.IsEnabled(FrameSettingsField.DepthOfField);
             m_MotionBlurFS          = frameSettings.IsEnabled(FrameSettingsField.MotionBlur);
@@ -306,7 +304,7 @@ namespace UnityEngine.Rendering.HighDefinition
 
                 //if exposure comes from the parent camera, it means we dont have to calculate / force it.
                 //Its already been done in the parent camera.
-                if (m_ExposureControlFS && isFixedExposure && camera.currentExposureTextures.useCurrentCamera)
+                if (isFixedExposure && camera.exposureControlFS && camera.currentExposureTextures.useCurrentCamera)
                 {
                     using (new ProfilingScope(cmd, ProfilingSampler.Get(HDProfileId.FixedExposure)))
                     {
@@ -738,9 +736,6 @@ namespace UnityEngine.Rendering.HighDefinition
 
         public RTHandle GetExposureTexture(HDCamera camera)
         {
-            if (!m_ExposureControlFS)
-                return m_EmptyExposureTexture;
-
             // Note: GetExposureTexture(camera) must be call AFTER the call of DoFixedExposure to be correctly taken into account
             // When we use Dynamic Exposure and we reset history we can't use pre-exposure (as there is no information)
             // For this reasons we put neutral value at the beginning of the frame in Exposure textures and
@@ -757,9 +752,6 @@ namespace UnityEngine.Rendering.HighDefinition
 
         public RTHandle GetPreviousExposureTexture(HDCamera camera)
         {
-            if (!m_ExposureControlFS)
-                return m_EmptyExposureTexture;
-
             // See GetExposureTexture
             var rt = camera.currentExposureTextures.previous;
             return rt ?? m_EmptyExposureTexture;
