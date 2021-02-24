@@ -1381,7 +1381,7 @@ namespace UnityEngine.Rendering.HighDefinition
                     //      render requests
                     var isViewDependent = visibleProbe.type == ProbeSettings.ProbeType.PlanarProbe;
 
-                    Camera parentCamera;
+                    HDCamera hdParentCamera;
 
                     if (isViewDependent)
                     {
@@ -1395,7 +1395,7 @@ namespace UnityEngine.Rendering.HighDefinition
                             var visibleInRenderRequest = renderRequests[visibleInIndex];
                             var viewerTransform = visibleInRenderRequest.hdCamera.camera.transform;
 
-                            parentCamera = visibleInRenderRequest.hdCamera.camera;
+                            hdParentCamera = visibleInRenderRequest.hdCamera;
 
                             var renderDatas = ListPool<HDProbe.RenderData>.Get();
 
@@ -1404,7 +1404,7 @@ namespace UnityEngine.Rendering.HighDefinition
                                 viewerTransform,
                                 new List<(int index, float weight)> {visibility},
                                 HDUtils.GetSceneCullingMaskFromCamera(visibleInRenderRequest.hdCamera.camera),
-                                parentCamera,
+                                hdParentCamera,
                                 visibleInRenderRequest.hdCamera.camera.fieldOfView,
                                 visibleInRenderRequest.hdCamera.camera.aspect,
                                 ref renderDatas
@@ -1421,7 +1421,7 @@ namespace UnityEngine.Rendering.HighDefinition
                     else
                     {
                         // No single parent camera for view dependent probes.
-                        parentCamera = null;
+                        hdParentCamera = null;
 
                         bool visibleInOneViewer = false;
                         for (int i = 0; i < visibilities.Count && !visibleInOneViewer; ++i)
@@ -1432,7 +1432,7 @@ namespace UnityEngine.Rendering.HighDefinition
                         if (visibleInOneViewer)
                         {
                             var renderDatas = ListPool<HDProbe.RenderData>.Get();
-                            AddHDProbeRenderRequests(visibleProbe, null, visibilities, 0, parentCamera, referenceFieldOfView: 90, referenceAspect: 1, ref renderDatas);
+                            AddHDProbeRenderRequests(visibleProbe, null, visibilities, 0, hdParentCamera, referenceFieldOfView: 90, referenceAspect: 1, ref renderDatas);
                             ListPool<HDProbe.RenderData>.Release(renderDatas);
                         }
                     }
@@ -1447,7 +1447,7 @@ namespace UnityEngine.Rendering.HighDefinition
                     Transform viewerTransform,
                     List<(int index, float weight)> visibilities,
                     ulong overrideSceneCullingMask,
-                    Camera parentCamera,
+                    HDCamera hdParentCamera,
                     float referenceFieldOfView,
                     float referenceAspect,
                     ref List<HDProbe.RenderData> renderDatas
@@ -1556,7 +1556,8 @@ namespace UnityEngine.Rendering.HighDefinition
                             visibleProbe.ForceRenderingNextUpdate();
                         }
 
-                        hdCamera.parentCamera = parentCamera; // Used to inherit the properties of the view
+                        hdCamera.SetParentCamera(hdParentCamera); // Used to inherit the properties of the view
+                        hdCamera.resetPostProcessingHistory = false;
 
                         if (visibleProbe.type == ProbeSettings.ProbeType.PlanarProbe && hdCamera.frameSettings.IsEnabled(FrameSettingsField.ExposureControl))
                         {

@@ -235,7 +235,25 @@ namespace UnityEngine.Rendering.HighDefinition
         internal uint                   cameraFrameCount = 0;
         internal bool                   animateMaterials;
         internal float                  lastTime;
-        internal Camera                 parentCamera = null; // Used for recursive rendering, e.g. a reflection in a scene view.
+
+        private  Camera                 m_parentCamera = null; // Used for recursive rendering, e.g. a reflection in a scene view.
+        internal  Camera                 parentCamera { get { return m_parentCamera; } } 
+
+        internal void SetParentCamera(HDCamera parentHdCam)
+        {
+            if (parentHdCam == null)
+            {
+                currentExposureTextures = new ExposureTextures() { useCurrentCamera = true, current = null, previous = null };
+                m_parentCamera = null;
+                return;
+            }
+
+            var parentExposureTextures = parentHdCam.currentExposureTextures;
+            parentExposureTextures.useCurrentCamera = false;
+            currentExposureTextures = parentExposureTextures;
+
+            m_parentCamera = parentHdCam.camera;
+        }
 
         // This property is ray tracing specific. It allows us to track for the RayTracingShadow history which light was using which slot.
         // This avoid ghosting and many other problems that may happen due to an unwanted history usage
@@ -350,6 +368,28 @@ namespace UnityEngine.Rendering.HighDefinition
 
                 return null;
             }
+        }
+
+        internal struct ExposureTextures
+        {
+            public bool useCurrentCamera;
+            public RTHandle current;
+            public RTHandle previous;
+        }
+
+        private ExposureTextures m_ExposureTextures = new ExposureTextures(){ useCurrentCamera = true, current = null, previous = null };
+
+        internal ExposureTextures currentExposureTextures { set { m_ExposureTextures = value; } get { return m_ExposureTextures; } }
+
+        internal void SetupExposureTextures()
+        {
+            if (!m_ExposureTextures.useCurrentCamera)
+                return;
+
+            // One frame delay + history RTs being flipped at the beginning of the frame means we
+            // have to grab the exposure marked as "previous"
+            m_ExposureTextures.current = GetPreviousFrameRT((int)HDCameraFrameHistoryType.Exposure);
+            m_ExposureTextures.previous = GetCurrentFrameRT((int)HDCameraFrameHistoryType.Exposure);
         }
 
         // This value will always be correct for the current camera, no need to check for
@@ -632,6 +672,8 @@ namespace UnityEngine.Rendering.HighDefinition
             m_RecorderCaptureActions = CameraCaptureBridge.GetCaptureActions(camera);
 
             SetupCurrentMaterialQuality(cmd);
+
+            SetupExposureTextures();
         }
 
         internal void UpdateAllViewConstants(bool jitterProjectionMatrix)

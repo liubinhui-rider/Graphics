@@ -745,16 +745,14 @@ namespace UnityEngine.Rendering.HighDefinition
 
             // 1x1 pixel, holds the current exposure multiplied in the red channel and EV100 value
             // in the green channel
-            // One frame delay + history RTs being flipped at the beginning of the frame means we
-            // have to grab the exposure marked as "previous"
-            var rt = camera.GetPreviousFrameRT((int)HDCameraFrameHistoryType.Exposure);
+            var rt = camera.currentExposureTextures.current;
             return rt ?? m_EmptyExposureTexture;
         }
 
         public RTHandle GetPreviousExposureTexture(HDCamera camera)
         {
             // See GetExposureTexture
-            var rt = camera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.Exposure);
+            var rt = camera.currentExposureTextures.previous;
             return rt ?? m_EmptyExposureTexture;
         }
 
