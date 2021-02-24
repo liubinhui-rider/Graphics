@@ -309,7 +309,10 @@ namespace UnityEngine.Rendering.HighDefinition
                 // Dynamic exposure (Auto, curve) is store in Exposure Textures at the end of the frame (as it rely on color buffer)
                 // Texture current and previous are swapped at the beginning of the frame.
                 bool isFixedExposure = IsExposureFixed(camera);
-                if (isFixedExposure)
+
+                //if exposure comes from the parent camera, it means we dont have to calculate / force it.
+                //Its already been done in the parent camera.
+                if (isFixedExposure && camera.currentExposureTextures.useCurrentCamera)
                 {
                     using (new ProfilingScope(cmd, ProfilingSampler.Get(HDProfileId.FixedExposure)))
                     {
