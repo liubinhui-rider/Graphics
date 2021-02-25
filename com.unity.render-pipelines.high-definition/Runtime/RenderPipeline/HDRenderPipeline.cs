@@ -1570,15 +1570,15 @@ namespace UnityEngine.Rendering.HighDefinition
 
                                 // If the planar is under exposure control, all the pixels will be de-exposed, for the other skies it is handeled in a shader.
                                 // For the clear color, we need to do it manually here.
-                                additionalCameraData.backgroundColorHDR = additionalCameraData.backgroundColorHDR * hdCamera.GpuExposureValue();
+                                additionalCameraData.backgroundColorHDR = additionalCameraData.backgroundColorHDR * visibleProbe.ProbeExposureValue();
                             }
                             else
                             {
                                 //the de-exposure multiplier must be used for anything rendering flatly, for example UI or Unlit.
                                 //this will cause them to blow up, but will match the standard nomralized exposure.
-                                hdCamera.RequestGpuDeExposureValue(m_PostProcessSystem.GetExposureTextureHandle(hdParentCamera.currentExposureTextures.previous));
+                                hdParentCamera.RequestGpuDeExposureValue(m_PostProcessSystem.GetExposureTextureHandle(hdParentCamera.currentExposureTextures.previous));
                                 visibleProbe.SetProbeExposureValue(1.0f);
-                                additionalCameraData.deExposureMultiplier = 1.0f / hdCamera.GpuDeExposureValue();
+                                additionalCameraData.deExposureMultiplier = 1.0f / hdParentCamera.GpuDeExposureValue();
                             }
                         }
 
