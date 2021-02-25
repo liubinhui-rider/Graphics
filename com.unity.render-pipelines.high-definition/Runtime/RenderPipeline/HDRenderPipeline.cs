@@ -1559,13 +1559,27 @@ namespace UnityEngine.Rendering.HighDefinition
                         hdCamera.SetParentCamera(hdParentCamera); // Used to inherit the properties of the view
                         hdCamera.resetPostProcessingHistory = false;
 
-                        if (visibleProbe.type == ProbeSettings.ProbeType.PlanarProbe && hdCamera.frameSettings.IsEnabled(FrameSettingsField.ExposureControl))
+                        if (visibleProbe.type == ProbeSettings.ProbeType.PlanarProbe)
                         {
-                            RTHandle exposureTexture = GetExposureTexture(hdCamera);
-                            visibleProbe.RequestProbeExposureValue(exposureTexture);
-                            // If the planar is under exposure control, all the pixels will be de-exposed, for the other skies it is handeled in a shader.
-                            // For the clear color, we need to do it manually here.
-                            additionalCameraData.backgroundColorHDR = additionalCameraData.backgroundColorHDR * visibleProbe.ProbeExposureValue();
+                            if (hdCamera.frameSettings.IsEnabled(FrameSettingsField.ExposureControl))
+                            {
+                                RTHandle exposureTexture = GetExposureTexture(hdParentCamera);
+                                hdParentCamera.RequestGpuExposureValue(exposureTexture);
+                                visibleProbe.SetProbeExposureValue(hdParentCamera.GpuExposureValue());
+                                additionalCameraData.deExposureMultiplier = 1.0f;
+
+                                // If the planar is under exposure control, all the pixels will be de-exposed, for the other skies it is handeled in a shader.
+                                // For the clear color, we need to do it manually here.
+                                additionalCameraData.backgroundColorHDR = additionalCameraData.backgroundColorHDR * hdCamera.GpuExposureValue();
+                            }
+                            else
+                            {
+                                //the de-exposure multiplier must be used for anything rendering flatly, for example UI or Unlit.
+                                //this will cause them to blow up, but will match the standard nomralized exposure.
+                                hdCamera.RequestGpuDeExposureValue(m_PostProcessSystem.GetExposureTextureHandle(hdParentCamera.currentExposureTextures.previous));
+                                visibleProbe.SetProbeExposureValue(1.0f);
+                                additionalCameraData.deExposureMultiplier = 1.0f / hdCamera.GpuDeExposureValue();
+                            }
                         }
 
                         HDAdditionalCameraData hdCam;

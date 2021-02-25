@@ -647,17 +647,8 @@ namespace UnityEngine.Rendering.HighDefinition
                 // Setup variants
                 var adaptationMode = m_Exposure.adaptationMode.value;
 
-                parameters.adaptationParams = new Vector4(m_Exposure.adaptationSpeedLightToDark.value, m_Exposure.adaptationSpeedDarkToLight.value, 0.0f, 0.0f);
-
-                if (hdCamera.resetPostProcessingHistory)
-                {
+                if (!Application.isPlaying || hdCamera.resetPostProcessingHistory)
                     adaptationMode = AdaptationMode.Fixed;
-                }
-                else if (!Application.isPlaying)
-                {
-                    adaptationMode = AdaptationMode.Progressive;
-                    parameters.adaptationParams = new Vector4(0.9f, 0.9f, 0.0f, 0.0f);
-                }
 
                 parameters.exposureVariants = m_ExposureVariants;
                 parameters.exposureVariants[0] = 1; // (int)exposureSettings.luminanceSource.value;
@@ -674,6 +665,7 @@ namespace UnityEngine.Rendering.HighDefinition
                 bool needsCurve = (isHistogramBased && m_Exposure.histogramUseCurveRemapping.value) || m_Exposure.mode.value == ExposureMode.CurveMapping;
 
                 parameters.histogramUsesCurve = m_Exposure.histogramUseCurveRemapping.value;
+                parameters.adaptationParams = new Vector4(m_Exposure.adaptationSpeedLightToDark.value, m_Exposure.adaptationSpeedDarkToLight.value, 0.0f, 0.0f);
 
                 parameters.exposureMode = m_Exposure.mode.value;
 
@@ -746,15 +738,18 @@ namespace UnityEngine.Rendering.HighDefinition
 
             // 1x1 pixel, holds the current exposure multiplied in the red channel and EV100 value
             // in the green channel
-            var rt = camera.currentExposureTextures.current;
+            return GetExposureTextureHandle(camera.currentExposureTextures.current);
+        }
+
+        public RTHandle GetExposureTextureHandle(RTHandle rt)
+        {
             return rt ?? m_EmptyExposureTexture;
         }
 
         public RTHandle GetPreviousExposureTexture(HDCamera camera)
         {
             // See GetExposureTexture
-            var rt = camera.currentExposureTextures.previous;
-            return rt ?? m_EmptyExposureTexture;
+            return GetExposureTextureHandle(camera.currentExposureTextures.previous);
         }
 
         internal RTHandle GetExposureDebugData()
@@ -769,7 +764,7 @@ namespace UnityEngine.Rendering.HighDefinition
 
         internal int GetLutSize()
         {
-            return m_LutSize; 
+            return m_LutSize;
         }
 
         internal ComputeBuffer GetHistogramBuffer()

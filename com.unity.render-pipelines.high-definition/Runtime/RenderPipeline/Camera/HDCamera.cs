@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Experimental.Rendering.RenderGraphModule;
+using Unity.Collections;
 
 namespace UnityEngine.Rendering.HighDefinition
 {
@@ -243,26 +244,25 @@ namespace UnityEngine.Rendering.HighDefinition
         {
             if (parentHdCam == null)
             {
-                currentExposureTextures = new ExposureTextures() { useCurrentCamera = true, current = null, previous = null };
+                m_ExposureTextures.clear();
+                m_ExposureTextures.useCurrentCamera = true;
                 m_parentCamera = null;
                 return;
             }
+
+            m_parentCamera = parentHdCam.camera;
 
             if (!m_ExposureControlFS)
             {
-                currentExposureTextures = new ExposureTextures() { useCurrentCamera = true, current = null, previous = null };
-                m_parentCamera = null;
+                m_ExposureTextures.clear();
+                m_ExposureTextures.useCurrentCamera = true;
                 return;
             }
 
-            currentExposureTextures = new ExposureTextures()
-            {
-                useCurrentCamera = false,
-                current = parentHdCam.currentExposureTextures.previous,
-                previous = parentHdCam.currentExposureTextures.current
-            };
-
-            m_parentCamera = parentHdCam.camera;
+            m_ExposureTextures.clear();
+            m_ExposureTextures.useCurrentCamera = false;
+            m_ExposureTextures.current = parentHdCam.currentExposureTextures.previous;
+            m_ExposureTextures.previous = parentHdCam.currentExposureTextures.current;
         }
 
         // This property is ray tracing specific. It allows us to track for the RayTracingShadow history which light was using which slot.
@@ -380,18 +380,99 @@ namespace UnityEngine.Rendering.HighDefinition
             }
         }
 
+        private float m_GpuExposureValue = 1.0f;
+        private float m_GpuDeExposureValue = 1.0f;
+
+        private struct ExposureGpuReadbackRequest
+        {
+            public bool isDeExposure;
+            public AsyncGPUReadbackRequest request;
+        }
+
+        // This member and function allow us to fetch the exposure value that was used to render the realtime HDProbe
+        // without forcing a sync between the c# and the GPU code.
+        private Queue<ExposureGpuReadbackRequest> m_ExposureAsyncRequest = new Queue<ExposureGpuReadbackRequest>();
+
+        internal void RequestGpuExposureValue(RTHandle exposureTexture)
+        {
+            RequestGpuTexelValue(exposureTexture, false);
+        }
+
+        internal void RequestGpuDeExposureValue(RTHandle exposureTexture)
+        {
+            RequestGpuTexelValue(exposureTexture, true);
+        }
+
+        private void RequestGpuTexelValue(RTHandle exposureTexture, bool isDeExposure)
+        {
+            var readbackRequest = new ExposureGpuReadbackRequest();
+            readbackRequest.request = AsyncGPUReadback.Request(exposureTexture.rt, 0, 0, 1, 0, 1, 0, 1);
+            readbackRequest.isDeExposure = isDeExposure;
+            m_ExposureAsyncRequest.Enqueue(readbackRequest);
+        }
+
+        private void PumpReadbackQueue()
+        {
+            while (m_ExposureAsyncRequest.Count != 0)
+            {
+                ExposureGpuReadbackRequest requestState = m_ExposureAsyncRequest.Peek();
+                ref AsyncGPUReadbackRequest request = ref requestState.request;
+#if UNITY_EDITOR
+                //HACK: when we are in the unity editor, requests get updated very very infrequently
+                // by the runtime. This can cause the m_ExposureAsyncRequest to become super bloated:
+                // sometimes up to 800 requests get accumulated.
+                // This hack forces an update of the request when in editor mode, now the m_ExposureAsyncRequest averages
+                // 3 elements. Not necesary when running in player mode, since the requests get updated properly (due to swap chain complexities)
+                request.Update();
+#endif
+                if (!request.done && !request.hasError)
+                    break;
+
+                // If this has an error, just skip it
+                if (!request.hasError)
+                {
+                    // Grab the native array from this readback
+                    NativeArray<float> exposureValue = request.GetData<float>();
+                    if (requestState.isDeExposure)
+                        m_GpuDeExposureValue = exposureValue[0];
+                    else
+                        m_GpuExposureValue   = exposureValue[0];
+                }
+                m_ExposureAsyncRequest.Dequeue();
+            }
+        }
+
+        // This function processes the asynchronous read-back requests for the exposure and updates the last known exposure value.
+        internal float GpuExposureValue()
+        {
+            PumpReadbackQueue();
+            return m_GpuExposureValue;
+        }
+
+        // This function processes the asynchronous read-back requests for the exposure and updates the last known exposure value.
+        internal float GpuDeExposureValue()
+        {
+            PumpReadbackQueue();
+            return m_GpuDeExposureValue;
+        }
+
         internal struct ExposureTextures
         {
             public bool useCurrentCamera;
             public RTHandle current;
             public RTHandle previous;
+
+            public void clear()
+            {
+                current = null;
+                previous = null;
+            }
         }
 
         private bool m_ExposureControlFS = false;
         internal bool exposureControlFS { get { return m_ExposureControlFS; } }
-        private ExposureTextures m_ExposureTextures = new ExposureTextures(){ useCurrentCamera = true, current = null, previous = null };
-
-        internal ExposureTextures currentExposureTextures { set { m_ExposureTextures = value; } get { return m_ExposureTextures; } }
+        private ExposureTextures m_ExposureTextures = new ExposureTextures(){ useCurrentCamera = true, current = null, previous = null};
+        internal ExposureTextures currentExposureTextures { get { return m_ExposureTextures; } }
 
         internal void SetupExposureTextures()
         {
@@ -402,7 +483,7 @@ namespace UnityEngine.Rendering.HighDefinition
             {
                 m_ExposureTextures.current = null;
                 m_ExposureTextures.previous = null;
-                return; 
+                return;
             }
 
             var currentTexture = GetCurrentFrameRT((int)HDCameraFrameHistoryType.Exposure);
@@ -632,8 +713,7 @@ namespace UnityEngine.Rendering.HighDefinition
                     m_HistoryRTSystem.Dispose();
                     m_HistoryRTSystem = new BufferedRTHandleSystem();
 
-                    m_ExposureTextures.current = null;
-                    m_ExposureTextures.previous = null;
+                    m_ExposureTextures.clear();
 
                     if (numColorPyramidBuffersRequired != 0)
                     {
@@ -850,6 +930,8 @@ namespace UnityEngine.Rendering.HighDefinition
 
             float exposureMultiplierForProbes = 1.0f / Mathf.Max(probeRangeCompressionFactor, 1e-6f);
             cb._ProbeExposureScale  = exposureMultiplierForProbes;
+
+            cb._DeExposureMultiplier = m_AdditionalCameraData == null ? 1.0f : m_AdditionalCameraData.deExposureMultiplier;
 
             cb._TransparentCameraOnlyMotionVectors = (frameSettings.IsEnabled(FrameSettingsField.MotionVectors) &&
                 !frameSettings.IsEnabled(FrameSettingsField.TransparentsWriteMotionVector)) ? 1 : 0;
