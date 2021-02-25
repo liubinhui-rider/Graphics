@@ -172,7 +172,24 @@ namespace UnityEngine.Rendering.Universal
         public virtual void FinishRendering(CommandBuffer cmd)
         {
         }
-
+/*
+ 对pass排序，按之前定义的RenderPassEvent。
+设置shader定义的时间变量，SetShaderTimeValues函数实现。
+将pass按event顺序，分成四块
+    BeforeRendering：用于处理阴影等，不是实际的渲染，只作为功能使用
+    MainRenderingOpaque：渲染不透明物体
+    MainRenderingTransparent：透明物体
+    AfterRendering：在后处理之后，在unity的demo中没看到具体渲染了啥，可能是扩展用的吧。
+执行SetupLights，设置光照需要的一系列参数，细节在光照部分细说。
+然后先执行BeforeRendering
+接着是一个循环，用于处理VR，由于手游中只需要渲染一次，VR部分先不管，只按一个去看。
+首先设置好相机属性，执行一次commandbuffer的clear指令。
+然后是不透明物体渲染，depth也在这执行。
+渲染透明物体，要注意的是透明和不透明物体的渲染，都是DrawObjectsPass实现的，参数不同，设置了RenderQueueRange和layer。
+渲染AfterRendering
+ */
+        // EnqueuePass就是把这些pass都加进m_ActiveRenderPassQueue里面,
+        // 后面的Execute部分则把这些pass都执行一遍,画出他们对应的东西.
         /// <summary>
         /// Execute the enqueued render passes. This automatically handles editor and stereo rendering.
         /// </summary>
@@ -182,7 +199,7 @@ namespace UnityEngine.Rendering.Universal
         {
             Camera camera = renderingData.cameraData.camera;
             SetCameraRenderState(context, ref renderingData.cameraData);
-
+            // 把m_ActiveRenderPassQueue中的pass都进行排序.
             SortStable(m_ActiveRenderPassQueue);
 
             // Cache the time for after the call to `SetupCameraProperties` and set the time variables in shader
@@ -196,6 +213,7 @@ namespace UnityEngine.Rendering.Universal
 #endif
             float deltaTime = Time.deltaTime;
             float smoothDeltaTime = Time.smoothDeltaTime;
+            // shader中使用的内置time变量都在这边设置.
             SetShaderTimeValues(time, deltaTime, smoothDeltaTime);
 
             // Upper limits for each block. Each block will contains render passes with events below the limit.
@@ -205,10 +223,14 @@ namespace UnityEngine.Rendering.Universal
             blockEventLimits[RenderPassBlock.AfterRendering] = (RenderPassEvent)Int32.MaxValue;
 
             NativeArray<int> blockRanges = new NativeArray<int>(blockEventLimits.Length + 1, Allocator.Temp);
+            // 把m_ActiveRenderPassQueue中的pass分成几块(BeforeRendering,MainRendering,AfterRendering)来执行.
             FillBlockRanges(blockEventLimits, blockRanges);
             blockEventLimits.Dispose();
-
+            // 设置好shader中使用的内置light数据
             SetupLights(context, ref renderingData);
+            
+            // Execute函数中把m_ActiveRenderPassQueue中的pass进行排序,并分成几块,
+            // 设置好一些共用的shader内置变量后,把这几块pass都跑一遍.
 
             // Before Render Block. This render blocks always execute in mono rendering.
             // Camera is not setup. Lights are not setup.
@@ -260,6 +282,7 @@ namespace UnityEngine.Rendering.Universal
             blockRanges.Dispose();
         }
 
+        // EnqueuePass就是把这些pass都加进m_ActiveRenderPassQueue里面,后面的Execute部分则把这些pass都执行一遍,画出他们对应的东西.
         /// <summary>
         /// Enqueues a render pass for execution.
         /// </summary>
@@ -352,6 +375,7 @@ namespace UnityEngine.Rendering.Universal
             int endIndex = blockRanges[blockIndex + 1];
             for (int currIndex = blockRanges[blockIndex]; currIndex < endIndex; ++currIndex)
             {
+                // 找到对应的pass去执行
                 var renderPass = m_ActiveRenderPassQueue[currIndex];
                 ExecuteRenderPass(context, renderPass, ref renderingData);
             }
@@ -363,6 +387,7 @@ namespace UnityEngine.Rendering.Universal
         void ExecuteRenderPass(ScriptableRenderContext context, ScriptableRenderPass renderPass, ref RenderingData renderingData)
         {
             CommandBuffer cmd = CommandBufferPool.Get(k_SetRenderTarget);
+            // pass在渲染前需要先配置渲染目标，renderer基类调用pass的Configure抽象函数。
             renderPass.Configure(cmd, renderingData.cameraData.cameraTargetDescriptor);
 
             RenderTargetIdentifier passColorAttachment = renderPass.colorAttachment;
@@ -409,7 +434,13 @@ namespace UnityEngine.Rendering.Universal
             context.ExecuteCommandBuffer(cmd);
             CommandBufferPool.Release(cmd);
 
+            // 去执行这个renderPass的渲染
             renderPass.Execute(context, ref renderingData);
+            
+            // 其实每一个渲染步骤中,都会设置好这一步的绘制条件.比如在DepthOnly这一步骤,就会在cullResults筛选出来的所有东西里面找到那些有写了DepthOnly的Pass来绘制.
+            // 所以你打开一个shader文件,会有好多个pass,每个pass都有对应的LightMode,这就是为了让这一个东西在渲染管线中对应的步骤去做相应的绘制.
+            // 所以总结来说,SRP其实就是把原先藏起来的渲染过程暴露出来,可以让我们清楚的看到在一个渲染流程中到底经历了哪些步骤,每一步骤都对哪些东西进行绘制.
+            // 这些步骤的顺序,绘制的东西也都与FrameDebug窗口中的每一个条目一一对应.相当于从FrameDebug中就可以看到这个渲染管线的具体渲染步骤细节.
         }
 
         void BeginXRRendering(ScriptableRenderContext context, Camera camera)

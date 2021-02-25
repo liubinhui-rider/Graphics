@@ -636,7 +636,7 @@ namespace UnityEngine.Rendering.Universal.Internal
         #endregion
 
         #region Motion Blur
-
+        // 对scene camera不开启
         void DoMotionBlur(Camera camera, CommandBuffer cmd, int source, int destination)
         {
             var material = m_Materials.cameraMotionBlur;

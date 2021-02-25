@@ -44,13 +44,22 @@ namespace UnityEngine.Rendering.Universal
         ForwardLights m_ForwardLights;
         StencilState m_DefaultStencilState;
 
+        /*
+创建几个特殊材质，用的是配置里的shader，这几个材质会传给对应的pass。
+设置模板测试StencilState结构体。
+创建用到的每个pass，指定渲染RenderPassEvent。
+设置各个rt
+创建ForwardLights实例，用于光源的相关计算。
+创建RenderingFeatures，这个类里只有cameraStacking一个bool值，像是个没开发完的功能。
+         */
         public ForwardRenderer(ForwardRendererData data) : base(data)
         {
+            // 根据4个shader创建材质  全屏拷贝 深度拷贝 采样 屏幕阴影
             Material blitMaterial = CoreUtils.CreateEngineMaterial(data.shaders.blitPS);
             Material copyDepthMaterial = CoreUtils.CreateEngineMaterial(data.shaders.copyDepthPS);
             Material samplingMaterial = CoreUtils.CreateEngineMaterial(data.shaders.samplingPS);
             Material screenspaceShadowsMaterial = CoreUtils.CreateEngineMaterial(data.shaders.screenSpaceShadowPS);
-
+            // 获取forwarddata中的模板缓冲数据
             StencilStateData stencilData = data.defaultStencilState;
             m_DefaultStencilState = StencilState.defaultValue;
             m_DefaultStencilState.enabled = stencilData.overrideStencilState;
@@ -61,6 +70,7 @@ namespace UnityEngine.Rendering.Universal
 
             // Note: Since all custom render passes inject first and we have stable sort,
             // we inject the builtin passes in the before events.
+            // 初始化各种pass 并且根据evt排序(实际上, evt是用于排序的, 排序在下方的代码有体现)
             m_MainLightShadowCasterPass = new MainLightShadowCasterPass(RenderPassEvent.BeforeRenderingShadows);
             m_AdditionalLightsShadowCasterPass = new AdditionalLightsShadowCasterPass(RenderPassEvent.BeforeRenderingShadows);
             m_DepthPrepass = new DepthOnlyPass(RenderPassEvent.BeforeRenderingPrepasses, RenderQueueRange.opaque, data.opaqueLayerMask);
@@ -89,17 +99,23 @@ namespace UnityEngine.Rendering.Universal
             m_OpaqueColor.Init("_CameraOpaqueTexture");
             m_AfterPostProcessColor.Init("_AfterPostProcessTexture");
             m_ColorGradingLut.Init("_InternalGradingLut");
+            // 初始化灯光
             m_ForwardLights = new ForwardLights();
         }
 
+        // 而SetUp函数做的就是把这些Pass组织起来,按什么顺序来定义这个渲染管线.下面截取一些来说明一下.
+        // 其实总结来说,SetUp()就是决定了渲染管线中会有哪些步骤,这些步骤的渲染顺序是什么.而每一步里面该怎么渲染,该渲染什么,都是在这一步的pass中自己定义的.
         /// <inheritdoc />
         public override void Setup(ScriptableRenderContext context, ref RenderingData renderingData)
         {
             Camera camera = renderingData.cameraData.camera;
             ref CameraData cameraData = ref renderingData.cameraData;
+            // 通过相机的msaa hdr等创建RT的描述
             RenderTextureDescriptor cameraTargetDescriptor = renderingData.cameraData.cameraTargetDescriptor;
 
             // Special path for depth only offscreen cameras. Only write opaques + transparents. 
+            // 如果是屏幕外的深度相机  只写入 opaques + transparents. 
+            // 对于只渲染深度的相机，只需要添加3个pass，opaque、skybox、transparent。
             bool isOffscreenDepthTexture = camera.targetTexture != null && camera.targetTexture.format == RenderTextureFormat.Depth;
             if (isOffscreenDepthTexture)
             {
@@ -114,6 +130,7 @@ namespace UnityEngine.Rendering.Universal
                 return;
             }
 
+            // 设置阴影相关pass  是否支持阴影
             bool mainLightShadows = m_MainLightShadowCasterPass.Setup(ref renderingData);
             bool additionalLightShadows = m_AdditionalLightsShadowCasterPass.Setup(ref renderingData);
             bool resolveShadowsInScreenSpace = mainLightShadows && renderingData.shadowData.requiresScreenSpaceShadowResolve;
@@ -122,6 +139,7 @@ namespace UnityEngine.Rendering.Universal
             // - We resolve shadows in screen space
             // - Scene view camera always requires a depth texture. We do a depth pre-pass to simplify it and it shouldn't matter much for editor.
             // - If game or offscreen camera requires it we check if we can copy the depth from the rendering opaques pass and use that instead.
+            // 是否生成深度prepass
             bool requiresDepthPrepass = renderingData.cameraData.isSceneViewCamera ||
                 (cameraData.requiresDepthTexture && (!CanCopyDepth(ref renderingData.cameraData)));
             requiresDepthPrepass |= resolveShadowsInScreenSpace;
@@ -136,24 +154,30 @@ namespace UnityEngine.Rendering.Universal
 
             // If camera requires depth and there's no depth pre-pass we create a depth texture that can be read
             // later by effect requiring it.
+            // 没有深度prepass的情况下生成深度图
             bool createDepthTexture = cameraData.requiresDepthTexture && !requiresDepthPrepass;
+            // 是否开启后处理
             bool postProcessEnabled = cameraData.postProcessEnabled;
-
+            // 设置颜色和深度纹理的rendertargethandle
             m_ActiveCameraColorAttachment = (createColorTexture) ? m_CameraColorAttachment : RenderTargetHandle.CameraTarget;
             m_ActiveCameraDepthAttachment = (createDepthTexture) ? m_CameraDepthAttachment : RenderTargetHandle.CameraTarget;
             bool intermediateRenderTexture = createColorTexture || createDepthTexture;
-            
+            // 根据需求创建临时的RT
             if (intermediateRenderTexture)
                 CreateCameraRenderTarget(context, ref cameraData);
-
+            // 记录两个RT ID
             ConfigureCameraTarget(m_ActiveCameraColorAttachment.Identifier(), m_ActiveCameraDepthAttachment.Identifier());
 
             // if rendering to intermediate render texture we don't have to create msaa backbuffer
+            // 如果有颜色和深度纹理 使用中间纹理就不再创建MSAA backbuffer
             int backbufferMsaaSamples = (intermediateRenderTexture) ? 1 : cameraTargetDescriptor.msaaSamples;
             
             if (Camera.main == camera && camera.cameraType == CameraType.Game && camera.targetTexture == null)
                 SetupBackbufferFormat(backbufferMsaaSamples, renderingData.cameraData.isStereoEnabled);
             
+            // 这些rendererFeatures是在RenderData的配置文件中设置的,相当于我们自己如果要在管线中做一些添加
+            // 就自己写上renderPass,添加到这些feature里.Forward管线在这里把我们自己的pass加进来.
+            // Feature是存储自定义pass数据的容器，可存储的数量不限，支持任何类型的数据。Feature一般用于扩展。
             for (int i = 0; i < rendererFeatures.Count; ++i)
             {
                 rendererFeatures[i].AddRenderPasses(this, ref renderingData);
@@ -165,38 +189,49 @@ namespace UnityEngine.Rendering.Universal
                 if(activeRenderPassQueue[i] == null)
                     activeRenderPassQueue.RemoveAt(i);
             }
+            // 查找是否有afterrender的pass
             bool hasAfterRendering = activeRenderPassQueue.Find(x => x.renderPassEvent == RenderPassEvent.AfterRendering) != null;
 
+            // 在ForwardRenderer中,定义了一堆的ScriptableRenderPass.ScriptableRenderPass其实就相当于渲染管线中的一个个步骤.
+            // 如m_DepthPrepass就相当于开始图片中Depth Texture这一步,m_RenderOpaqueForwardPass就相当于默认管线中的Opaque Object这一步.
+            // 这里就是把一个个的步骤加进管线,在FrameDebug中可以看到一个个的步骤
+            
+            // 添加主光阴影pass
             if (mainLightShadows)
                 EnqueuePass(m_MainLightShadowCasterPass);
 
+            // 添加附加光阴影pass
             if (additionalLightShadows)
                 EnqueuePass(m_AdditionalLightsShadowCasterPass);
 
+            // 添加并设置深度预处理pass
             if (requiresDepthPrepass)
             {
                 m_DepthPrepass.Setup(cameraTargetDescriptor, m_DepthTexture);
                 EnqueuePass(m_DepthPrepass);
             }
 
+            // 添加屏幕空间阴影pass
             if (resolveShadowsInScreenSpace)
             {
                 m_ScreenSpaceShadowResolvePass.Setup(cameraTargetDescriptor);
                 EnqueuePass(m_ScreenSpaceShadowResolvePass);
             }
 
+            // 后处理是否开启，URP把后处理分成了两步，一个是实现常规特效的后处理，一个是抗锯齿这种，具体逻辑在PostProcessPass内部区分。
             if (postProcessEnabled)
             {
                 m_ColorGradingLutPass.Setup(m_ColorGradingLut);
                 EnqueuePass(m_ColorGradingLutPass);
             }
-
+            // 不透明物体渲染pass
             EnqueuePass(m_RenderOpaqueForwardPass);
-
+            // 天空盒pass
             if (camera.clearFlags == CameraClearFlags.Skybox && RenderSettings.skybox != null)
                 EnqueuePass(m_DrawSkyboxPass);
 
             // If a depth texture was created we necessarily need to copy it, otherwise we could have render it to a renderbuffer
+            // 拷贝深度贴图
             if (createDepthTexture)
             {
                 m_CopyDepthPass.Setup(m_ActiveCameraDepthAttachment, m_DepthTexture);
@@ -212,6 +247,7 @@ namespace UnityEngine.Rendering.Universal
                 EnqueuePass(m_CopyColorPass);
             }
 
+            // 添加半透明渲染Pass
             EnqueuePass(m_RenderTransparentForwardPass);
             EnqueuePass(m_OnRenderObjectCallbackPass);
 
@@ -223,6 +259,7 @@ namespace UnityEngine.Rendering.Universal
 
             // if we have additional filters
             // we need to stay in a RT
+            // 添加最后的几个pass 后处理pass 捕获pass 最终拷贝pass
             if (afterRenderExists)
             {
                 bool willRenderFinalPass = (m_ActiveCameraColorAttachment != RenderTargetHandle.CameraTarget);

@@ -7,6 +7,22 @@ using UnityEditor.Rendering.Universal;
 using UnityEngine.Scripting.APIUpdating;
 using Lightmapping = UnityEngine.Experimental.GlobalIllumination.Lightmapping;
 
+// 源码解读梳理可以看这些网站
+// URP/LWRP学习入门 源码解读
+// https://zhuanlan.zhihu.com/p/103457229?utm_source=wechat_session
+
+// LWRP（URP）学习笔记一渲染流程
+// https://www.it610.com/article/1298638971122810880.htm
+
+// URP源码学习（一）整体框架理解
+// https://zhuanlan.zhihu.com/p/153075170
+// URP源码学习（二）管线，pipeline
+// https://zhuanlan.zhihu.com/p/154328449
+// URP源码学习（三）渲染管线的默认实现，forward
+// https://zhuanlan.zhihu.com/p/157473939
+// URP源码学习（四）光照
+// https://zhuanlan.zhihu.com/p/157879289
+
 namespace UnityEngine.Rendering.LWRP
 {
     [Obsolete("LWRP -> Universal (UnityUpgradable) -> UnityEngine.Rendering.Universal.UniversalRenderPipeline", true)]
@@ -22,6 +38,10 @@ namespace UnityEngine.Rendering.Universal
 {
     public sealed partial class UniversalRenderPipeline : RenderPipeline
     {
+        // PerFrameBuffer
+        // 每一帧数据都是一样的
+        // _GlossyEnvironmentColor和_SubtractiveShadowColor这两个运行时可能是不会改变的，但是为了shader正确使用，还是要每帧设置一次。
+        // 时间相关的几个值，内置管线中是可以直接取的，URP中要自己设置了。
         internal static class PerFrameBuffer
         {
             public static int _GlossyEnvironmentColor;
@@ -34,6 +54,7 @@ namespace UnityEngine.Rendering.Universal
             public static int _TimeParameters;
         }
 
+        // PerCameraBuffer：每个相机需要的数据，包括矩阵，屏幕参数，相机世界坐标。
         static internal class PerCameraBuffer
         {
             // TODO: This needs to account for stereo rendering
@@ -160,14 +181,18 @@ namespace UnityEngine.Rendering.Universal
             CameraCaptureBridge.enabled = false;
         }
 
+        // 关键的几步就是对摄像机根据深度排好序,然后调用RenderSingleCamera逐个去绘制每个摄像机.
         protected override void Render(ScriptableRenderContext renderContext, Camera[] cameras)
         {
             BeginFrameRendering(renderContext, cameras);
-
+            // 如果使用线性颜色空间 灯光强度使用线性空间下的强度
             GraphicsSettings.lightsUseLinearIntensity = (QualitySettings.activeColorSpace == ColorSpace.Linear);
+            // 是否开启SRP Batcher  通过piplineasset 配置
             GraphicsSettings.useScriptableRenderPipelineBatching = asset.useSRPBatcher;
+            // 设置shader的一些常量
             SetupPerFrameShaderConstants();
 
+            // 根据相机深度把相机排好序
             SortCameras(cameras);
             foreach (Camera camera in cameras)
             {
@@ -176,6 +201,7 @@ namespace UnityEngine.Rendering.Universal
                 //It should be called before culling to prepare material. When there isn't any VisualEffect component, this method has no effect.
                 VFX.VFXManager.PrepareCamera(camera);
 #endif
+                // 正式开始渲染, 渲染一个个相机
                 RenderSingleCamera(renderContext, camera);
 
                 EndCameraRendering(renderContext, camera);
@@ -186,31 +212,52 @@ namespace UnityEngine.Rendering.Universal
 
         public static void RenderSingleCamera(ScriptableRenderContext context, Camera camera)
         {
+            // 获取相机的裁剪参数(剔除参数)
             if (!camera.TryGetCullingParameters(IsStereoEnabled(camera), out var cullingParameters))
                 return;
 
+            // 设置管线资源
             var settings = asset;
+            // 获取camera附加数据, (就是挂载在camera节点上的脚本或者asset)
             UniversalAdditionalCameraData additionalCameraData = null;
             if (camera.cameraType == CameraType.Game || camera.cameraType == CameraType.VR)
                 camera.gameObject.TryGetComponent(out additionalCameraData);
 
+            // 根据PipelineAsset和UniversalAdditionalCameraData(相机上的设置)设置好摄像机参数
             InitializeCameraData(settings, camera, additionalCameraData, out var cameraData);
+            // 把相机的参数设置进shader共用变量,即shader中使用的一些内置shader变量
+            // 设置camera相关的shader常量  相机宽高 投影矩阵等
             SetupPerCameraShaderConstants(cameraData);
-
+            // 获取渲染器
+            // 获取到该相机使用的ScriptableRenderer,即自己定义的SRP管线.
+            // 该管线如果相机有自己定义好,就用相机定义的,没有则用asset设置的管线.
+            // URP中默认使用的是ForwardRenderer,就是在这里使用上了重新定义的渲染管线.
             ScriptableRenderer renderer = (additionalCameraData != null) ? additionalCameraData.scriptableRenderer : settings.scriptableRenderer;
+            // RenderPipelineAsset 继承自 ScriptableObject
+            // public static RenderPipelineAsset renderPipelineAsset
+            // {
+            //     get => GraphicsSettings.defaultRenderPipeline;
+            //     set => GraphicsSettings.defaultRenderPipeline = value;
+            // }
+
             if (renderer == null)
             {
                 Debug.LogWarning(string.Format("Trying to render {0} with an invalid renderer. Camera rendering will be skipped.", camera.name));
                 return;
             }
-
+            // 设置好FrameDebug中的标签名字
+            // 这个tag决定了Frame Debug中显示的最顶层的名字.如果你设置了DebugLevel
+            // 那么你在FrameDebug中就可以看到相应摄像机的渲染步骤.
             string tag = (asset.debugLevel >= PipelineDebugLevel.Profiling) ? camera.name: k_RenderCameraTag;
+            // 获取渲染用的commandbuffer
             CommandBuffer cmd = CommandBufferPool.Get(tag);
             using (new ProfilingSample(cmd, tag))
             {
+                // 清空渲染器
                 renderer.Clear();
+                // 根据cameraData设置好cullingParameters(设置剔除参数)
                 renderer.SetupCullingParameters(ref cullingParameters, ref cameraData);
-
+                // 渲染上下文执行commandbuffer
                 context.ExecuteCommandBuffer(cmd);
                 cmd.Clear();
 
@@ -220,16 +267,27 @@ namespace UnityEngine.Rendering.Universal
                 if (cameraData.isSceneViewCamera)
                     ScriptableRenderContext.EmitWorldGeometryForSceneView(camera);
 #endif
-
+                // 根据裁剪参数计算出裁剪结果,管线中的所有渲染步骤都是从这个裁剪结果中筛选出自己要渲染的元素
                 var cullResults = context.Cull(ref cullingParameters);
+                // 把前面获取到的所有参数都设置进renderingData, //初始化渲染数据renderingdata 是否生成阴影 传入剔除结果和相机数据等供渲染器使用
                 InitializeRenderingData(settings, ref cameraData, ref cullResults, out var renderingData);
-
+                // 设置好管线中的所有设置
                 renderer.Setup(context, ref renderingData);
+                // 执行管线中的一个个步骤
                 renderer.Execute(context, ref renderingData);
+                
+                // 其实这个函数最关键的两步就是
+                // 设置好管线中的所有设置
+                // renderer.Setup(context, ref renderingData);
+                // 执行管线中的一个个步骤
+                // renderer.Execute(context, ref renderingData);
+                // 从这里进入了ScriptableRenderer,URP自定义的渲染管线ForwardRenderer.
             }
 
             context.ExecuteCommandBuffer(cmd);
+            // 清空cb
             CommandBufferPool.Release(cmd);
+            // 提交渲染执行
             context.Submit();
         }
 

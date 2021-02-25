@@ -77,6 +77,8 @@ namespace UnityEngine.Rendering.Universal.Internal
             }
         }
 
+        // 核心函数Setup，作用是设置相关shader变量值，这部分看着代码不少，实际就是根据光源类型，设置不同数值。
+        // 要注意的是现在不支持shadowmask，后续版本应该会有支持。
         public void Setup(ScriptableRenderContext context, ref RenderingData renderingData)
         {
             int additionalLightsCount = renderingData.lightData.additionalLightsCount;

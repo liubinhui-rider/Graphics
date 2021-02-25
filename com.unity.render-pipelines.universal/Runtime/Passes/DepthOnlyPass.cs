@@ -61,6 +61,8 @@ namespace UnityEngine.Rendering.Universal.Internal
                 cmd.Clear();
 
                 var sortFlags = renderingData.cameraData.defaultOpaqueSortFlags;
+                // ShaderTagId m_ShaderTagId = new ShaderTagId("DepthOnly");
+                // 筛选出在裁剪结果里shader中LightMode="DepthOnly"的Pass来绘制.
                 var drawSettings = CreateDrawingSettings(m_ShaderTagId, ref renderingData, sortFlags);
                 drawSettings.perObjectData = PerObjectData.None;
 
@@ -68,7 +70,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 Camera camera = cameraData.camera;
                 if (cameraData.isStereoEnabled)
                     context.StartMultiEye(camera);
-
+                // 根据设置好的筛选条件来绘制物体.
                 context.DrawRenderers(renderingData.cullResults, ref drawSettings, ref m_FilteringSettings);
 
             }
